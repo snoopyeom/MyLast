@@ -314,6 +314,81 @@ class SKABSegLoader(object):
         return np.float32(window), np.float32(label)
 
 
+class WAAMSegLoader(object):
+    """Loader for the WAAM dataset.
+
+    The ``WAAM_data`` directory must contain ``combined_normal_data.csv``
+    with only normal samples and ``combined_abnormal_data.csv`` with only
+    anomalous samples.  The normal file is used for training, while the
+    abnormal file is used for testing and validation.
+    """
+
+    def __init__(
+        self,
+        data_path,
+        win_size,
+        step,
+        mode="train",
+        train_start=0.0,
+        train_end=1.0,
+        return_index: bool = False,
+    ):
+        self.mode = mode
+        self.step = step
+        self.win_size = win_size
+        self.scaler = StandardScaler()
+        self.return_index = return_index
+
+        normal_file = os.path.join(data_path, "combined_normal_data.csv")
+        normal_df = pd.read_csv(normal_file)
+        normal_values = normal_df.drop(columns=["Folder"], errors="ignore").values
+        normal_values = np.nan_to_num(normal_values)
+        self.scaler.fit(normal_values)
+        normal_values = self.scaler.transform(normal_values)
+        start = int(len(normal_values) * train_start)
+        end = int(len(normal_values) * train_end)
+        self.train = normal_values[start:end]
+
+        abnormal_file = os.path.join(data_path, "combined_abnormal_data.csv")
+        abnormal_df = pd.read_csv(abnormal_file)
+        test_values = abnormal_df.drop(
+            columns=["Folder", "label"], errors="ignore"
+        ).values
+        test_values = np.nan_to_num(test_values)
+        self.test = self.scaler.transform(test_values)
+        self.val = self.test
+        self.test_labels = np.ones(len(self.test))
+
+    def __len__(self):
+        if self.mode == "train":
+            return (self.train.shape[0] - self.win_size) // self.step + 1
+        elif self.mode == "val":
+            return (self.val.shape[0] - self.win_size) // self.step + 1
+        elif self.mode == "test":
+            return (self.test.shape[0] - self.win_size) // self.step + 1
+        else:
+            return (self.test.shape[0] - self.win_size) // self.win_size + 1
+
+    def __getitem__(self, index):
+        start = index * self.step
+        if self.mode == "train":
+            window = self.train[start : start + self.win_size]
+            label = np.zeros(self.win_size)
+        elif self.mode == "val":
+            window = self.val[start : start + self.win_size]
+            label = np.zeros(self.win_size)
+        elif self.mode == "test":
+            window = self.test[start : start + self.win_size]
+            label = self.test_labels[start : start + self.win_size]
+        else:
+            start = index * self.win_size
+            window = self.test[start : start + self.win_size]
+            label = self.test_labels[start : start + self.win_size]
+        if self.return_index:
+            return np.float32(window), np.float32(label), start
+        return np.float32(window), np.float32(label)
+
+
 def get_loader_segment(data_path, batch_size, win_size=100, step=100, mode='train', dataset='KDD', train_start=0.0, train_end=1.0, return_index: bool = False):
     if (dataset == 'SMD'):
         dataset = SMDSegLoader(data_path, win_size, step, mode, train_start, train_end, return_index=return_index)
@@ -325,6 +400,8 @@ def get_loader_segment(data_path, batch_size, win_size=100, step=100, mode='trai
         dataset = PSMSegLoader(data_path, win_size, 1, mode, train_start, train_end, return_index=return_index)
     elif (dataset == 'SKAB'):
         dataset = SKABSegLoader(data_path, win_size, step, mode, train_start, train_end, return_index=return_index)
+    elif (dataset == 'WAAM'):
+        dataset = WAAMSegLoader(data_path, win_size, step, mode, train_start, train_end, return_index=return_index)
 
     shuffle = False
     if mode == 'train':
