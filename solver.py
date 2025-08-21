@@ -108,11 +108,15 @@ class Solver(object):
             train_end=self.train_end,
             return_index=True,
         )
-        self.vali_loader = get_loader_segment(self.data_path, batch_size=self.batch_size, win_size=self.win_size,
-                                              mode='val',
-                                              dataset=self.dataset,
-                                              train_start=self.train_start,
-                                              train_end=self.train_end)
+        self.val_loader = get_loader_segment(
+            self.data_path,
+            batch_size=self.batch_size,
+            win_size=self.win_size,
+            mode='val',
+            dataset=self.dataset,
+            train_start=self.train_start,
+            train_end=self.train_end,
+        )
         self.test_loader = get_loader_segment(self.data_path, batch_size=self.batch_size, win_size=self.win_size,
                                               mode='test',
                                               dataset=self.dataset,
@@ -186,7 +190,7 @@ class Solver(object):
         return np.average(loss_1), np.average(loss_2)
 
     def compute_metrics(self):
-        """Evaluate F1 and ROC AUC on the current model using the threshold loader."""
+        """Evaluate F1 and ROC AUC on the current model using the validation loader."""
         self.model.eval()
         try:
             from sklearn.metrics import precision_recall_fscore_support, roc_auc_score
@@ -233,10 +237,10 @@ class Solver(object):
             attens_energy.append(cri)
         train_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
 
-        # energies on threshold loader
+        # energies on validation loader
         attens_energy = []
-        test_labels = []
-        for i, batch in enumerate(self.thre_loader):
+        val_labels = []
+        for i, batch in enumerate(self.val_loader):
             if len(batch) == 3:
                 input_data, labels, _ = batch
             else:
@@ -267,14 +271,14 @@ class Solver(object):
             cri = metric * loss
             cri = cri.detach().cpu().numpy()
             attens_energy.append(cri)
-            test_labels.append(labels)
+            val_labels.append(labels)
 
         attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
-        test_labels = np.concatenate(test_labels, axis=0).reshape(-1)
+        val_labels = np.concatenate(val_labels, axis=0).reshape(-1)
         combined_energy = np.concatenate([train_energy, attens_energy], axis=0)
         thresh = np.percentile(combined_energy, 100 - self.anomaly_ratio)
         pred = (attens_energy > thresh).astype(int)
-        gt = test_labels.astype(int)
+        gt = val_labels.astype(int)
 
         from sklearn.metrics import precision_recall_fscore_support
         # detection adjustment: please see this issue for more information
@@ -364,7 +368,7 @@ class Solver(object):
                             self.cpd_indices.append(int(indices[0]))
                         if self.update_count % getattr(self, 'cpd_log_interval', 20) == 0:
                             # evaluate periodically after concept drift update
-                            vali_loss1, vali_loss2 = self.vali(self.test_loader)
+                            vali_loss1, vali_loss2 = self.vali(self.val_loader)
                             f1, auc = self.compute_metrics()
                             self.history.append((self.update_count, f1, auc))
                             print(
@@ -426,7 +430,7 @@ class Solver(object):
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(loss1_list)
 
-            vali_loss1, vali_loss2 = self.vali(self.test_loader)
+            vali_loss1, vali_loss2 = self.vali(self.val_loader)
             need_metrics = (
                 not self.history
                 or self.history[-1][0] != self.update_count
