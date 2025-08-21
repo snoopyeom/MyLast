@@ -357,7 +357,8 @@ class WAAMSegLoader(object):
         test_values = np.nan_to_num(test_values)
         self.test = self.scaler.transform(test_values)
         self.val = self.test
-        self.test_labels = np.ones(len(self.test))
+        labels = abnormal_df.get("label", pd.Series(["Normal"] * len(abnormal_df)))
+        self.test_labels = (labels != "Normal").astype(int).values
 
     def __len__(self):
         if self.mode == "train":
@@ -376,7 +377,7 @@ class WAAMSegLoader(object):
             label = np.zeros(self.win_size)
         elif self.mode == "val":
             window = self.val[start : start + self.win_size]
-            label = np.zeros(self.win_size)
+            label = self.test_labels[start : start + self.win_size]
         elif self.mode == "test":
             window = self.test[start : start + self.win_size]
             label = self.test_labels[start : start + self.win_size]
