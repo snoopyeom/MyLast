@@ -514,7 +514,7 @@ class Solver(object):
 
         criterion = nn.MSELoss(reduction="none")
 
-        # (1) stastic on the train set
+        # (1) statistics on the train set
         attens_energy = []
         for i, batch in enumerate(self.train_loader):
             if len(batch) == 3:
@@ -552,53 +552,14 @@ class Solver(object):
         attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
         train_energy = np.array(attens_energy)
 
-        # (2) find the threshold
-        attens_energy = []
-        for i, batch in enumerate(self.thre_loader):
-            if len(batch) == 3:
-                input_data, labels, _ = batch
-            else:
-                input_data, labels = batch
-            input = input_data.float().to(self.device)
-            output, series, prior, _ = self.model(input)
-
-            loss = torch.mean(criterion(input, output), dim=-1)
-
-            series_loss = 0.0
-            prior_loss = 0.0
-            for u in range(len(prior)):
-                if u == 0:
-                    series_loss = my_kl_loss(series[u], (
-                            prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                   self.win_size)).detach()) * temperature
-                    prior_loss = my_kl_loss(
-                        (prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                self.win_size)),
-                        series[u].detach()) * temperature
-                else:
-                    series_loss += my_kl_loss(series[u], (
-                            prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                   self.win_size)).detach()) * temperature
-                    prior_loss += my_kl_loss(
-                        (prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                self.win_size)),
-                        series[u].detach()) * temperature
-            # Metric
-            metric = torch.softmax((-series_loss - prior_loss), dim=-1)
-            cri = metric * loss
-            cri = cri.detach().cpu().numpy()
-            attens_energy.append(cri)
-
-        attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
-        test_energy = np.array(attens_energy)
-        combined_energy = np.concatenate([train_energy, test_energy], axis=0)
-        thresh = np.percentile(combined_energy, 100 - self.anomaly_ratio)
+        # (2) determine the threshold using only training statistics
+        thresh = np.percentile(train_energy, 100 - self.anomaly_ratio)
         print("Threshold :", thresh)
 
         # (3) evaluation on the test set
         test_labels = []
         attens_energy = []
-        for i, batch in enumerate(self.thre_loader):
+        for i, batch in enumerate(self.test_loader):
             if len(batch) == 3:
                 input_data, labels, _ = batch
             else:
