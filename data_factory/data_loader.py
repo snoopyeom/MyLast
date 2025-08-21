@@ -27,19 +27,21 @@ class PSMSegLoader(object):
 
         self.scaler.fit(data)
         data = self.scaler.transform(data)
-        test_data = pd.read_csv(data_path + '/test.csv')
+        test_df = pd.read_csv(data_path + '/test.csv')
+        test_data = np.nan_to_num(test_df.values[:, 1:])
+        test_data = self.scaler.transform(test_data)
 
-        test_data = test_data.values[:, 1:]
-        test_data = np.nan_to_num(test_data)
-
-        self.test = self.scaler.transform(test_data)
+        labels = pd.read_csv(data_path + '/test_label.csv').values[:, 1:]
+        labels = np.nan_to_num(labels)
+        split = len(test_data) // 2
+        self.val = test_data[:split]
+        self.test = test_data[split:]
+        self.val_labels = labels[:split]
+        self.test_labels = labels[split:]
 
         start = int(len(data) * train_start)
         end = int(len(data) * train_end)
         self.train = data[start:end]
-        self.val = self.test
-
-        self.test_labels = pd.read_csv(data_path + '/test_label.csv').values[:, 1:]
 
         print("test:", self.test.shape)
         print("train:", self.train.shape)
@@ -61,10 +63,10 @@ class PSMSegLoader(object):
         start = index * self.step
         if self.mode == "train":
             window = self.train[start:start + self.win_size]
-            label = self.test_labels[0:self.win_size]
+            label = np.zeros(self.win_size)
         elif self.mode == 'val':
             window = self.val[start:start + self.win_size]
-            label = self.test_labels[0:self.win_size]
+            label = self.val_labels[start:start + self.win_size]
         elif self.mode == 'test':
             window = self.test[start:start + self.win_size]
             label = self.test_labels[start:start + self.win_size]
@@ -88,12 +90,16 @@ class MSLSegLoader(object):
         self.scaler.fit(data)
         data = self.scaler.transform(data)
         test_data = np.load(data_path + "/MSL_test.npy")
-        self.test = self.scaler.transform(test_data)
+        test_data = self.scaler.transform(test_data)
+        labels = np.load(data_path + "/MSL_test_label.npy")
+        split = len(test_data) // 2
+        self.val = test_data[:split]
+        self.test = test_data[split:]
+        self.val_labels = labels[:split]
+        self.test_labels = labels[split:]
         start = int(len(data) * train_start)
         end = int(len(data) * train_end)
         self.train = data[start:end]
-        self.val = self.test
-        self.test_labels = np.load(data_path + "/MSL_test_label.npy")
         print("test:", self.test.shape)
         print("train:", self.train.shape)
 
@@ -112,10 +118,10 @@ class MSLSegLoader(object):
         start = index * self.step
         if self.mode == "train":
             window = self.train[start:start + self.win_size]
-            label = self.test_labels[0:self.win_size]
+            label = np.zeros(self.win_size)
         elif self.mode == 'val':
             window = self.val[start:start + self.win_size]
-            label = self.test_labels[0:self.win_size]
+            label = self.val_labels[start:start + self.win_size]
         elif self.mode == 'test':
             window = self.test[start:start + self.win_size]
             label = self.test_labels[start:start + self.win_size]
@@ -139,12 +145,16 @@ class SMAPSegLoader(object):
         self.scaler.fit(data)
         data = self.scaler.transform(data)
         test_data = np.load(data_path + "/SMAP_test.npy")
-        self.test = self.scaler.transform(test_data)
+        test_data = self.scaler.transform(test_data)
+        labels = np.load(data_path + "/SMAP_test_label.npy")
+        split = len(test_data) // 2
+        self.val = test_data[:split]
+        self.test = test_data[split:]
+        self.val_labels = labels[:split]
+        self.test_labels = labels[split:]
         start = int(len(data) * train_start)
         end = int(len(data) * train_end)
         self.train = data[start:end]
-        self.val = self.test
-        self.test_labels = np.load(data_path + "/SMAP_test_label.npy")
         print("test:", self.test.shape)
         print("train:", self.train.shape)
 
@@ -163,10 +173,10 @@ class SMAPSegLoader(object):
         start = index * self.step
         if self.mode == "train":
             window = self.train[start:start + self.win_size]
-            label = self.test_labels[0:self.win_size]
+            label = np.zeros(self.win_size)
         elif self.mode == 'val':
             window = self.val[start:start + self.win_size]
-            label = self.test_labels[0:self.win_size]
+            label = self.val_labels[start:start + self.win_size]
         elif self.mode == 'test':
             window = self.test[start:start + self.win_size]
             label = self.test_labels[start:start + self.win_size]
@@ -213,10 +223,10 @@ class SMDSegLoader(object):
         start = index * self.step
         if self.mode == "train":
             window = self.train[start:start + self.win_size]
-            label = self.test_labels[0:self.win_size]
+            label = np.zeros(self.win_size)
         elif self.mode == 'val':
             window = self.val[start:start + self.win_size]
-            label = self.test_labels[0:self.win_size]
+            label = np.zeros(self.win_size)
         elif self.mode == 'test':
             window = self.test[start:start + self.win_size]
             label = self.test_labels[start:start + self.win_size]
@@ -279,10 +289,13 @@ class SKABSegLoader(object):
             columns=["datetime", "anomaly", "changepoint"], errors="ignore"
         ).values
         test_values = np.nan_to_num(test_values)
-        self.test = self.scaler.transform(test_values)
-        # use test data for validation as well
-        self.val = self.test
-        self.test_labels = test_df["anomaly"].values
+        test_values = self.scaler.transform(test_values)
+        labels = test_df["anomaly"].values
+        split = len(test_values) // 2
+        self.val = test_values[:split]
+        self.test = test_values[split:]
+        self.val_labels = labels[:split]
+        self.test_labels = labels[split:]
 
     def __len__(self):
         if self.mode == "train":
@@ -301,7 +314,7 @@ class SKABSegLoader(object):
             label = np.zeros(self.win_size)
         elif self.mode == "val":
             window = self.val[start : start + self.win_size]
-            label = np.zeros(self.win_size)
+            label = self.val_labels[start : start + self.win_size]
         elif self.mode == "test":
             window = self.test[start : start + self.win_size]
             label = self.test_labels[start : start + self.win_size]
@@ -355,10 +368,14 @@ class WAAMSegLoader(object):
             columns=["Folder", "label"], errors="ignore"
         ).values
         test_values = np.nan_to_num(test_values)
-        self.test = self.scaler.transform(test_values)
-        self.val = self.test
+        test_values = self.scaler.transform(test_values)
         labels = abnormal_df.get("label", pd.Series(["Normal"] * len(abnormal_df)))
-        self.test_labels = (labels != "Normal").astype(int).values
+        labels = (labels != "Normal").astype(int).values
+        split = len(test_values) // 2
+        self.val = test_values[:split]
+        self.test = test_values[split:]
+        self.val_labels = labels[:split]
+        self.test_labels = labels[split:]
 
     def __len__(self):
         if self.mode == "train":
@@ -377,7 +394,7 @@ class WAAMSegLoader(object):
             label = np.zeros(self.win_size)
         elif self.mode == "val":
             window = self.val[start : start + self.win_size]
-            label = self.test_labels[start : start + self.win_size]
+            label = self.val_labels[start : start + self.win_size]
         elif self.mode == "test":
             window = self.test[start : start + self.win_size]
             label = self.test_labels[start : start + self.win_size]
